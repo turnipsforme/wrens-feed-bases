@@ -1,10 +1,5 @@
 import { App, BasesEntry } from "obsidian";
-import React, {
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useApp } from "./hooks";
 import { FeedEntry } from "./FeedEntry";
@@ -20,6 +15,7 @@ export const MasonryView: React.FC<MasonryViewProps> = ({
   const app = useApp();
   const containerRef = useRef<HTMLDivElement>(null);
   const [columnCount, setColumnCount] = useState(1);
+  const gapSize = 16;
 
   // Track container width for responsive column calculation
   useEffect(() => {
@@ -31,7 +27,6 @@ export const MasonryView: React.FC<MasonryViewProps> = ({
 
         // Calculate column count based on container width and max card width
         // Account for gaps between columns (16px per gap)
-        const gapSize = 16;
         const availableWidth = width - gapSize * 2; // padding on sides
         const cols = Math.max(
           1,
@@ -70,7 +65,10 @@ export const MasonryView: React.FC<MasonryViewProps> = ({
       ) : (
         <div
           className="bases-feed-masonry-grid"
-          style={{ gridTemplateColumns: `repeat(${columnCount}, 1fr)` }}
+          style={{
+            gridTemplateColumns: `repeat(${columnCount}, minmax(0, 1fr))`,
+            maxWidth: `${columnCount * maxCardWidth + (columnCount - 1) * gapSize}px`,
+          }}
         >
           {columns.map((columnEntries, columnIndex) => (
             <MasonryColumn
@@ -104,21 +102,20 @@ const MasonryColumn: React.FC<MasonryColumnProps> = ({
     getScrollElement: getScrollEl,
     estimateSize: () => 280,
     overscan: 5,
-    measureElement: (element, entry, instance) => {
+    measureElement: (element, _entry, instance) => {
       const direction = instance.scrollDirection;
       if (direction === "forward" || direction === null) {
         return (
           (element as HTMLElement | null)?.getBoundingClientRect().height ?? 0
         );
-      } else {
-        // Don't remeasure if we are scrolling up to prevent stuttering
-        const indexKey = Number(
-          (element as HTMLElement).getAttribute("data-index"),
-        );
-        // @ts-ignore - accessing private property for performance fix
-        const cacheMeasurement = instance.itemSizeCache.get(indexKey);
-        return cacheMeasurement ?? 0;
       }
+
+      const indexKey = Number(
+        (element as HTMLElement).getAttribute("data-index"),
+      );
+      // @ts-ignore - accessing private property for old stable masonry behavior
+      const cachedMeasurement = instance.itemSizeCache.get(indexKey);
+      return cachedMeasurement ?? 0;
     },
   });
 

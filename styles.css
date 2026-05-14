@@ -29,11 +29,13 @@
   display: grid;
   gap: 16px;
   width: 100%;
+  margin: 0 auto;
 }
 
 .bases-feed-masonry-column {
   position: relative;
   width: 100%;
+  min-width: 0;
   min-height: 100px;
 }
 
@@ -67,6 +69,9 @@
   background-color: var(--background-primary);
   border: 1px solid var(--background-modifier-border);
   border-radius: 8px;
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
   padding: clamp(16px, 2.5vw, 28px);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
 }
@@ -98,6 +103,11 @@
   color: var(--text-normal);
   font-size: var(--font-ui-medium);
   line-height: 1.6;
+  min-width: 0;
+}
+
+.bases-feed-entry-editor {
+  min-width: 0;
 }
 
 .bases-feed-entry-editor .markdown-source-view {

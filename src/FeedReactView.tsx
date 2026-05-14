@@ -60,21 +60,20 @@ const SingleColumnView: React.FC<SingleColumnViewProps> = ({
     getScrollElement: getScrollEl,
     estimateSize: () => 280,
     overscan: 8,
-    measureElement: (element, entry, instance) => {
+    measureElement: (element, _entry, instance) => {
       const direction = instance.scrollDirection;
       if (direction === "forward" || direction === null) {
         return (
           (element as HTMLElement | null)?.getBoundingClientRect().height ?? 0
         );
-      } else {
-        // Don't remeasure if we are scrolling up to prevent stuttering
-        const indexKey = Number(
-          (element as HTMLElement).getAttribute("data-index"),
-        );
-        // @ts-ignore - accessing private property for performance fix (see https://github.com/TanStack/virtual/issues/659)
-        const cacheMeasurement = instance.itemSizeCache.get(indexKey);
-        return cacheMeasurement ?? 0;
       }
+
+      const indexKey = Number(
+        (element as HTMLElement).getAttribute("data-index"),
+      );
+      // @ts-ignore - accessing private property for old stable card behavior
+      const cachedMeasurement = instance.itemSizeCache.get(indexKey);
+      return cachedMeasurement ?? 0;
     },
   });
 

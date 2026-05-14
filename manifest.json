@@ -1,9 +1,9 @@
 {
 	"id": "feed-bases",
-	"name": "Feed Bases",
-	"version": "0.10",
+	"name": "Feed Bases (Wren's version)",
+	"version": "0.12",
 	"minAppVersion": "1.10.0",
-	"description": "Adds a feed layout to bases so you can display notes with their content in an editable feed view. Hides H1, renders daily note title as date. Based off of obsidian feed bases by Edrick Leong.",
+	"description": "Adds a feed layout to bases so you can display notes with their content in an editable feed view. Hides H1, renders daily note title as date.",
 	"author": "wren",
 	"isDesktopOnly": false
 }

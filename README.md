@@ -1,4 +1,4 @@
-## Obsidian Feed Bases
+## Obsidian Feed Bases (Wren's version)
 
 <a href='https://ko-fi.com/W7W71T4JPP' target='_blank'><img height='36' style='border:0px;height:36px;' src='https://storage.ko-fi.com/cdn/kofi5.png?v=6' border='0' alt='Buy Me a Coffee at ko-fi.com' /></a>
 
@@ -21,7 +21,7 @@ Obsidian v1.10.0 is currently in [Early Access](https://help.obsidian.md/early-a
 
 1. Install the [BRAT plugin](obsidian://show-plugin?id=obsidian42-brat) under Community Plugins.
 2. Open BRAT settings and click "Add beta plugin".
-3. Enter the URL of this repository: `https://github.com/edrickleong/obsidian-feed-bases`.
+3. Enter the URL of this repository.
 4. Under "Select a version", choose the Latest version.
 5. Click "Add plugin".
 
