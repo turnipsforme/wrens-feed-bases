@@ -152,9 +152,8 @@
   display: none;
 }
 
-/* Hide note H1s because feed card title already identifies each note */
-.bases-feed-entry-editor .cm-line.HyperMD-header-1,
-.bases-feed-entry-editor .cm-line:has(.cm-header-1),
+/* Hide note H1s because feed card title already identifies each note.
+   No :has() here: it forces style invalidation across every editor on each keystroke. */
 .bases-feed-entry-editor .HyperMD-header-1,
 .bases-feed-entry-editor .markdown-rendered h1,
 .bases-feed-entry-editor .markdown-preview-view h1 {

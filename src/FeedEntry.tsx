@@ -1,22 +1,24 @@
-import { App, BasesEntry, MarkdownView, WorkspaceLeaf } from "obsidian";
-import React, { useCallback } from "react";
+import { App, MarkdownView, TFile, WorkspaceLeaf } from "obsidian";
+import React, { memo, useCallback } from "react";
 import { getDisplayTitle } from "./display-title";
 
-export const FeedEntry: React.FC<FeedEntryProps> = ({
-  entry,
+// Memoized on `file` (not the BasesEntry, which is recreated on every query
+// update) so typing in one card doesn't re-render every other card.
+export const FeedEntry = memo(function FeedEntry({
+  file,
   app,
   showProperties,
   onEntryClick,
   onEntryContextMenu,
-}) => {
+}: FeedEntryProps) {
   const handleTitleClick = (evt: React.MouseEvent) => {
     evt.preventDefault();
     const isModEvent = evt.ctrlKey || evt.metaKey;
-    onEntryClick(entry, isModEvent);
+    onEntryClick(file, isModEvent);
   };
 
   const handleContextMenu = (evt: React.MouseEvent) => {
-    onEntryContextMenu(evt, entry);
+    onEntryContextMenu(evt, file);
   };
 
   const handleHover = (evt: React.MouseEvent) => {
@@ -25,7 +27,7 @@ export const FeedEntry: React.FC<FeedEntryProps> = ({
       source: "bases",
       hoverParent: app.renderContext,
       targetEl: evt.currentTarget,
-      linktext: entry.file.path,
+      linktext: file.path,
     });
   };
 
@@ -36,10 +38,15 @@ export const FeedEntry: React.FC<FeedEntryProps> = ({
       const leaf = new WorkspaceLeaf(app);
       void (async () => {
         try {
-          await leaf.openFile(entry.file, {
+          await leaf.openFile(file, {
             state: { mode: "source", source: false },
           });
-          if (!alive) return;
+          // Unmounted while the file was opening: the cleanup below already
+          // ran against the empty view, so dispose of the real one now.
+          if (!alive) {
+            disposeLeaf(leaf);
+            return;
+          }
 
           const view = leaf.view;
           if (!(view instanceof MarkdownView)) {
@@ -58,9 +65,10 @@ export const FeedEntry: React.FC<FeedEntryProps> = ({
       return () => {
         alive = false;
         node.replaceChildren();
+        disposeLeaf(leaf);
       };
     },
-    [app, entry.file],
+    [app, file],
   );
 
   return (
@@ -70,9 +78,9 @@ export const FeedEntry: React.FC<FeedEntryProps> = ({
           className="bases-feed-entry-title"
           onClick={handleTitleClick}
           onMouseEnter={handleHover}
-          href={entry.file.path}
+          href={file.path}
         >
-          {getDisplayTitle(entry.file.basename)}
+          {getDisplayTitle(file.basename)}
         </a>
       </div>
 
@@ -89,12 +97,37 @@ export const FeedEntry: React.FC<FeedEntryProps> = ({
       </div>
     </div>
   );
+});
+
+// Tear down a detached leaf's view (CodeMirror instance, vault/metadata event
+// listeners) and its resize observer. leaf.detach() is avoided on purpose: it
+// pushes the leaf onto the workspace's "reopen closed tab" history.
+function disposeLeaf(leaf: WorkspaceLeaf): void {
+  try {
+    const internal = leaf as unknown as InternalLeaf;
+    const { view, _empty: emptyView } = internal;
+    if (view && view !== emptyView) {
+      internal.view = emptyView;
+      void view.close().catch((e: unknown) => {
+        console.error("Error closing feed editor:", e);
+      });
+    }
+    internal.resizeObserver?.disconnect();
+  } catch (e) {
+    console.error("Error disposing feed editor:", e);
+  }
+}
+
+type InternalLeaf = {
+  view: { close: () => Promise<void> } | null;
+  _empty: InternalLeaf["view"];
+  resizeObserver?: ResizeObserver;
 };
 
 type FeedEntryProps = {
-  entry: BasesEntry;
+  file: TFile;
   app: App;
   showProperties: boolean;
-  onEntryClick: (entry: BasesEntry, isModEvent: boolean) => void;
-  onEntryContextMenu: (evt: React.MouseEvent, entry: BasesEntry) => void;
+  onEntryClick: (file: TFile, isModEvent: boolean) => void;
+  onEntryContextMenu: (evt: React.MouseEvent, file: TFile) => void;
 };

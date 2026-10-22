@@ -1,8 +1,8 @@
-import { App, BasesEntry } from "obsidian";
+import { App, BasesEntry, TFile } from "obsidian";
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { useVirtualizer } from "@tanstack/react-virtual";
 import { useApp } from "./hooks";
 import { FeedEntry } from "./FeedEntry";
+import { useFeedVirtualizer } from "./virtualizer";
 
 export const MasonryView: React.FC<MasonryViewProps> = ({
   entries,
@@ -95,30 +95,7 @@ const MasonryColumn: React.FC<MasonryColumnProps> = ({
   onEntryClick,
   onEntryContextMenu,
 }) => {
-  const getScrollEl = useMemo(() => () => scrollElement, [scrollElement]);
-
-  const rowVirtualizer = useVirtualizer({
-    count: entries.length,
-    getScrollElement: getScrollEl,
-    estimateSize: () => 280,
-    overscan: 5,
-    measureElement: (element, _entry, instance) => {
-      const direction = instance.scrollDirection;
-      if (direction === "forward" || direction === null) {
-        return (
-          (element as HTMLElement | null)?.getBoundingClientRect().height ?? 0
-        );
-      }
-
-      const indexKey = Number(
-        (element as HTMLElement).getAttribute("data-index"),
-      );
-      // @ts-ignore - accessing private property for old stable masonry behavior
-      const cachedMeasurement = instance.itemSizeCache.get(indexKey);
-      return cachedMeasurement ?? 0;
-    },
-  });
-
+  const rowVirtualizer = useFeedVirtualizer(entries, scrollElement, 2);
   const virtualItems = rowVirtualizer.getVirtualItems();
 
   return (
@@ -127,30 +104,28 @@ const MasonryColumn: React.FC<MasonryColumnProps> = ({
         className="bases-feed-virtualizer"
         style={{ height: rowVirtualizer.getTotalSize() }}
       >
-        {virtualItems.map(
-          (vi: ReturnType<typeof rowVirtualizer.getVirtualItems>[number]) => {
-            const entry = entries[vi.index];
-            return (
-              <div
-                key={vi.key}
-                data-index={vi.index}
-                ref={rowVirtualizer.measureElement}
-                className="bases-feed-virtual-item"
-                style={{
-                  transform: `translateY(${vi.start}px)`,
-                }}
-              >
-                <FeedEntry
-                  entry={entry}
-                  app={app}
-                  showProperties={showProperties}
-                  onEntryClick={onEntryClick}
-                  onEntryContextMenu={onEntryContextMenu}
-                />
-              </div>
-            );
-          },
-        )}
+        {virtualItems.map((vi) => {
+          const entry = entries[vi.index];
+          return (
+            <div
+              key={vi.key}
+              data-index={vi.index}
+              ref={rowVirtualizer.measureElement}
+              className="bases-feed-virtual-item"
+              style={{
+                transform: `translateY(${vi.start}px)`,
+              }}
+            >
+              <FeedEntry
+                file={entry.file}
+                app={app}
+                showProperties={showProperties}
+                onEntryClick={onEntryClick}
+                onEntryContextMenu={onEntryContextMenu}
+              />
+            </div>
+          );
+        })}
       </div>
     </div>
   );
@@ -160,8 +135,8 @@ const MasonryColumn: React.FC<MasonryColumnProps> = ({
 
 type MasonryViewProps = {
   entries: BasesEntry[];
-  onEntryClick: (entry: BasesEntry, isModEvent: boolean) => void;
-  onEntryContextMenu: (evt: React.MouseEvent, entry: BasesEntry) => void;
+  onEntryClick: (file: TFile, isModEvent: boolean) => void;
+  onEntryContextMenu: (evt: React.MouseEvent, file: TFile) => void;
   scrollElement: HTMLElement;
   showProperties: boolean;
   maxCardWidth: number;
@@ -172,6 +147,6 @@ type MasonryColumnProps = {
   scrollElement: HTMLElement;
   app: App;
   showProperties: boolean;
-  onEntryClick: (entry: BasesEntry, isModEvent: boolean) => void;
-  onEntryContextMenu: (evt: React.MouseEvent, entry: BasesEntry) => void;
+  onEntryClick: (file: TFile, isModEvent: boolean) => void;
+  onEntryContextMenu: (evt: React.MouseEvent, file: TFile) => void;
 };

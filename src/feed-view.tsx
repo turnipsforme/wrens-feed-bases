@@ -1,10 +1,4 @@
-import {
-  BasesEntry,
-  BasesPropertyId,
-  BasesView,
-  Menu,
-  QueryController,
-} from "obsidian";
+import { BasesEntry, BasesView, Menu, QueryController, TFile } from "obsidian";
 import { StrictMode } from "react";
 import { createRoot, Root } from "react-dom/client";
 import { FeedReactView } from "./FeedReactView";
@@ -64,84 +58,23 @@ export class FeedView extends BasesView {
       return;
     }
 
-    this.entries = [...this.data.data].filter(
+    this.entries = this.data.data.filter(
       (entry) => entry.file.extension === "md",
     );
 
-    const sort = this.config.getSort();
-    const firstSortProperty = sort?.[0]?.property;
-    // Normalize direction to 'ASC' | 'DESC'; default to ASC for alphabetical title sort
-    const firstSortDirection = sort?.[0]?.direction ?? "ASC";
-    // Always call sort with a comparator. If no property selected, default to file title A–Z.
-    this.entries.sort(
-      this.getEntryComparator(firstSortProperty, firstSortDirection),
-    );
+    // Bases presorts query data by the view's sort config (all keys, with
+    // its own type-aware comparison). Only fall back to title A–Z when the
+    // user hasn't configured a sort.
+    if (this.config.getSort().length === 0) {
+      this.entries.sort((a, b) =>
+        a.file.basename.localeCompare(b.file.basename, undefined, {
+          numeric: true,
+          sensitivity: "base",
+        }),
+      );
+    }
 
     this.renderReactFeed();
-  }
-
-  // Build a comparator for entries based on an optional property and direction.
-  // If no property is provided, defaults to sorting by file title (basename) A–Z.
-  private getEntryComparator(
-    property?: BasesPropertyId,
-    direction: "ASC" | "DESC" = "ASC",
-  ): (a: BasesEntry, b: BasesEntry) => number {
-    if (property) {
-      return (a: BasesEntry, b: BasesEntry) => {
-        const valueA = this.getPropertyValue(a, property);
-        const valueB = this.getPropertyValue(b, property);
-
-        let compareValue = 0;
-        if (valueA === null && valueB === null) {
-          compareValue = 0;
-        } else if (valueA === null) {
-          compareValue = 1; // nulls last
-        } else if (valueB === null) {
-          compareValue = -1; // nulls last
-        } else if (typeof valueA === "number" && typeof valueB === "number") {
-          compareValue = valueA - valueB;
-        } else {
-          compareValue = String(valueA).localeCompare(
-            String(valueB),
-            undefined,
-            {
-              numeric: true,
-              sensitivity: "base",
-            },
-          );
-        }
-
-        return direction === "ASC" ? compareValue : -compareValue;
-      };
-    }
-
-    // Default: sort by file title (basename) A–Z, case-insensitive, numeric-aware
-    return (a: BasesEntry, b: BasesEntry) =>
-      a.file.basename.localeCompare(b.file.basename, undefined, {
-        numeric: true,
-        sensitivity: "base",
-      });
-  }
-
-  private getPropertyValue(
-    entry: BasesEntry,
-    propId: BasesPropertyId,
-  ): string | number | null {
-    try {
-      const value = entry.getValue(propId);
-      if (!value || !value.isTruthy()) return null;
-
-      // Try to get a comparable value
-      const valueObj = value as unknown;
-      if (valueObj instanceof Date) return valueObj.getTime();
-      if (typeof valueObj === "object" && valueObj && "valueOf" in valueObj) {
-        return (valueObj as { valueOf: () => string | number }).valueOf();
-      }
-      const str = value.toString();
-      return str && str.trim().length > 0 ? str : null;
-    } catch {
-      return null;
-    }
   }
 
   private renderReactFeed(): void {
@@ -168,27 +101,27 @@ export class FeedView extends BasesView {
             multipleColumns={multipleColumns}
             fullWidthCards={fullWidthCards}
             maxCardWidth={maxCardWidth}
-            onEntryClick={(entry: BasesEntry, isModEvent: boolean) => {
-              this.app.workspace
-                .openLinkText(entry.file.path, "", isModEvent)
-                .catch((err) => {
-                  console.error("Failed to open link:", err);
-                });
-            }}
-            onEntryContextMenu={(evt: React.MouseEvent, entry: BasesEntry) => {
-              evt.preventDefault();
-              this.showEntryContextMenu(evt.nativeEvent, entry);
-            }}
+            onEntryClick={this.handleEntryClick}
+            onEntryContextMenu={this.handleEntryContextMenu}
           />
         </AppContext.Provider>
       </StrictMode>,
     );
   }
 
-  private showEntryContextMenu(evt: MouseEvent, entry: BasesEntry): void {
-    const file = entry.file;
-    const menu = Menu.forEvent(evt);
+  // Stable references so memoized cards don't re-render on every data update.
+  private handleEntryClick = (file: TFile, isModEvent: boolean): void => {
+    this.app.workspace.openLinkText(file.path, "", isModEvent).catch((err) => {
+      console.error("Failed to open link:", err);
+    });
+  };
 
+  private handleEntryContextMenu = (
+    evt: React.MouseEvent,
+    file: TFile,
+  ): void => {
+    evt.preventDefault();
+    const menu = Menu.forEvent(evt.nativeEvent);
     this.app.workspace.handleLinkContextMenu(menu, file.path, "");
-  }
+  };
 }

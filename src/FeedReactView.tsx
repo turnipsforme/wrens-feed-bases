@@ -1,9 +1,9 @@
-import { BasesEntry } from "obsidian";
-import React, { useMemo } from "react";
-import { useVirtualizer } from "@tanstack/react-virtual";
+import { BasesEntry, TFile } from "obsidian";
+import React from "react";
 import { useApp } from "./hooks";
 import { MasonryView } from "./MasonryView";
 import { FeedEntry } from "./FeedEntry";
+import { useFeedVirtualizer } from "./virtualizer";
 
 export const FeedReactView: React.FC<FeedReactViewProps> = ({
   entries,
@@ -53,30 +53,7 @@ const SingleColumnView: React.FC<SingleColumnViewProps> = ({
   maxCardWidth,
 }) => {
   const app = useApp();
-  const getScrollEl = useMemo(() => () => scrollElement, [scrollElement]);
-
-  const rowVirtualizer = useVirtualizer({
-    count: entries.length,
-    getScrollElement: getScrollEl,
-    estimateSize: () => 280,
-    overscan: 8,
-    measureElement: (element, _entry, instance) => {
-      const direction = instance.scrollDirection;
-      if (direction === "forward" || direction === null) {
-        return (
-          (element as HTMLElement | null)?.getBoundingClientRect().height ?? 0
-        );
-      }
-
-      const indexKey = Number(
-        (element as HTMLElement).getAttribute("data-index"),
-      );
-      // @ts-ignore - accessing private property for old stable card behavior
-      const cachedMeasurement = instance.itemSizeCache.get(indexKey);
-      return cachedMeasurement ?? 0;
-    },
-  });
-
+  const rowVirtualizer = useFeedVirtualizer(entries, scrollElement, 3);
   const virtualItems = rowVirtualizer.getVirtualItems();
 
   return (
@@ -91,30 +68,28 @@ const SingleColumnView: React.FC<SingleColumnViewProps> = ({
           className="bases-feed-virtualizer"
           style={{ height: rowVirtualizer.getTotalSize() }}
         >
-          {virtualItems.map(
-            (vi: ReturnType<typeof rowVirtualizer.getVirtualItems>[number]) => {
-              const entry = entries[vi.index];
-              return (
-                <div
-                  key={vi.key}
-                  data-index={vi.index}
-                  ref={rowVirtualizer.measureElement}
-                  className="bases-feed-virtual-item"
-                  style={{
-                    transform: `translateY(${vi.start}px)`,
-                  }}
-                >
-                  <FeedEntry
-                    entry={entry}
-                    app={app}
-                    showProperties={showProperties}
-                    onEntryClick={onEntryClick}
-                    onEntryContextMenu={onEntryContextMenu}
-                  />
-                </div>
-              );
-            },
-          )}
+          {virtualItems.map((vi) => {
+            const entry = entries[vi.index];
+            return (
+              <div
+                key={vi.key}
+                data-index={vi.index}
+                ref={rowVirtualizer.measureElement}
+                className="bases-feed-virtual-item"
+                style={{
+                  transform: `translateY(${vi.start}px)`,
+                }}
+              >
+                <FeedEntry
+                  file={entry.file}
+                  app={app}
+                  showProperties={showProperties}
+                  onEntryClick={onEntryClick}
+                  onEntryContextMenu={onEntryContextMenu}
+                />
+              </div>
+            );
+          })}
         </div>
       )}
     </div>
@@ -125,8 +100,8 @@ const SingleColumnView: React.FC<SingleColumnViewProps> = ({
 
 type FeedReactViewProps = {
   entries: BasesEntry[];
-  onEntryClick: (entry: BasesEntry, isModEvent: boolean) => void;
-  onEntryContextMenu: (evt: React.MouseEvent, entry: BasesEntry) => void;
+  onEntryClick: (file: TFile, isModEvent: boolean) => void;
+  onEntryContextMenu: (evt: React.MouseEvent, file: TFile) => void;
   scrollElement: HTMLElement;
   showProperties: boolean;
   multipleColumns?: boolean;
@@ -136,8 +111,8 @@ type FeedReactViewProps = {
 
 type SingleColumnViewProps = {
   entries: BasesEntry[];
-  onEntryClick: (entry: BasesEntry, isModEvent: boolean) => void;
-  onEntryContextMenu: (evt: React.MouseEvent, entry: BasesEntry) => void;
+  onEntryClick: (file: TFile, isModEvent: boolean) => void;
+  onEntryContextMenu: (evt: React.MouseEvent, file: TFile) => void;
   scrollElement: HTMLElement;
   showProperties: boolean;
   fullWidthCards: boolean;
