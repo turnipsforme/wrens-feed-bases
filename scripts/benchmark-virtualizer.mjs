@@ -40,8 +40,11 @@ const instance = { scrollDirection: "forward", options: { ...options, horizontal
 const observerEntry = { borderBoxSize: [{blockSize: 440, inlineSize: 500}] };
 const heights = [];
 for (let i=0;i<100;i++) heights.push(measure(element, observerEntry, instance));
+const forwardReads = rectReads;
 instance.scrollDirection = "backward";
 const backwardHeight = measure(element, observerEntry, instance);
+const backwardReads = rectReads - forwardReads;
 assert.ok(heights.every(h=>h===440));
+assert.equal(backwardReads, 0);
 view.onunload();
-console.log(JSON.stringify({ kind: "mocked-dom-real-tanstack-core", cache, observerMeasurements: 101, rectReads, backwardHeight }, null, 2));
+console.log(JSON.stringify({ kind: "mocked-dom-real-tanstack-core", cache, observerMeasurements: 101, rectReads, backwardReads, backwardHeight }, null, 2));

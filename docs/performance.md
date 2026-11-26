@@ -81,3 +81,12 @@ No dependencies added or removed. No speculative editor pool, static cards, depe
 ### Verification maintenance
 
 The permanent verification workflow compares the candidate with the original main revision. Intermediate paired runs are linked above rather than hard-coding experiment-only commit IDs into future builds (those commits may become unreachable after squash merging). All tests run on the candidate; baseline benchmarks check order independently. The one-shot comparison commands can be reproduced by restoring the appropriate src revision on a disposable checkout while leaving the harness fixed.
+
+## Native Obsidian 1.15.1 follow-up (0.13.1)
+
+Native desktop runs (Electron 43, 100- and 1,000-note vaults, single and masonry, scrolled over the full range) showed that the default TanStack measurement (H3/H7 above) caused roughly 50% more editor opens than 0.13.0, and an earlier deferred editor cleanup slowed loads 2-4x and left hundreds of editors open. Both were reverted:
+
+- Editor cleanup is synchronous again, as in 0.13.0 (hardened: failed or invalid opens are disposed and the resize observer is always disconnected).
+- `measureElement` is custom again, using only public APIs: it measures the rendered height and reuses a per-path cached height while scrolling backward, so cards above the viewport cannot resize and jump the list. The cache resets with the file list.
+
+Final build versus 0.13.0, 1,000 notes, median of 3 trials: single load 686 vs 733 ms, masonry 721 vs 725 ms, editor opens 799 vs 803 (single) and 1,217 vs 1,209 (masonry), peak heap 163 vs 162 MB (single) and 184 vs 179 MB (masonry), 0 editors left open after scrolling in both. 100 notes: load 129 vs 123 ms, 223 vs 222 editors. Both builds blank frames during fast full-range scrolling; this is not a regression. 5,000 and 10,000 note native runs and iOS were not measured.

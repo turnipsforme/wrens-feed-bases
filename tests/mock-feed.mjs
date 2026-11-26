@@ -20,8 +20,8 @@ const mocks = {
       openFile(file) {
         this.file = file;
         return new Promise((resolve, reject) => {
-          this.finish = (view = new MarkdownView()) => { this.view = view; resolve(); };
-          this.fail = (view = new MarkdownView()) => { this.view = view; reject(new Error("mock open failed")); };
+          this.finish = (view = this.view === this._empty ? new MarkdownView() : this.view) => { this.view = view; resolve(); };
+          this.fail = (view = this.view === this._empty ? new MarkdownView() : this.view) => { this.view = view; reject(new Error("mock open failed")); };
         });
       }
     }

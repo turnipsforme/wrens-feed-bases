@@ -88,7 +88,8 @@ test("fixtures have unique paths at every requested size and mixed note content"
   } finally { await rm(dir, { recursive: true, force: true }); }
 });
 
-test("rejected editor opens dispose partially initialized views even after unmount", async () => {
+test("rejected editor opens dispose partially initialized views even after unmount", async (t) => {
+  const log = t.mock.method(console, "error", () => {});
   for (const unmountFirst of [false, true]) {
     const { node, cleanup, leaf } = mountEntry();
     if (unmountFirst) cleanup();
@@ -102,6 +103,19 @@ test("rejected editor opens dispose partially initialized views even after unmou
     if (!unmountFirst) cleanup();
     assert.equal(editor.closes, 1);
   }
+  assert.equal(log.mock.callCount(), 1);
+});
+test("editor cleanup disconnects the observer even when close throws", async (t) => {
+  const log = t.mock.method(console, "error", () => {});
+  const { node, cleanup, leaf } = mountEntry();
+  const editor = new leaf._empty.constructor();
+  editor.close = () => { throw new Error("mock close failed"); };
+  leaf.finish(editor);
+  await Promise.resolve();
+  cleanup();
+  assert.deepEqual(node.children, []);
+  assert.equal(leaf.resizeObserver.disconnects, 1);
+  assert.equal(log.mock.callCount(), 1);
 });
 test("unexpected editor type is closed immediately", async () => {
   const { node, cleanup, leaf } = mountEntry();
@@ -171,7 +185,7 @@ test("input order changes retain the original stable sort tie ordering", () => {
   assert.deepEqual(renderedFiles(container), [b.file,a.file]);
 });
 
-test("late height changes while scrolling backward update positions using TanStack's public measurement", () => {
+test("backward scroll reuses measured heights and TanStack corrects offsets", () => {
   const { view, container } = mockView([entry("A"), entry("B")]);
   view.onDataUpdated();
   beginHooks();
@@ -188,16 +202,24 @@ test("late height changes while scrolling backward update positions using TanSta
   let reads = 0;
   const element = {
     getBoundingClientRect() { reads++; return {height: 440}; },
-    get offsetHeight() { reads++; return 440; }, getAttribute() { return "0"; }
+    getAttribute() { return "0"; }
   };
   const height = virtualizer.options.measureElement(element, { borderBoxSize: [{blockSize: 440, inlineSize: 500}] }, virtualizer);
   assert.equal(height, 440);
-  assert.equal(reads, 0);
+  assert.equal(reads, 1);
   virtualizer.resizeItem(0, height);
   assert.equal(virtualizer.getTotalSize(), 720);
   assert.equal(adjustments.at(-1), 140);
+  // The same path reuses its measured height while scrolling backward.
   assert.equal(virtualizer.options.measureElement(element, undefined, virtualizer), 440);
   assert.equal(reads, 1);
+  // A new path has no cached height and is measured even while scrolling backward.
+  const other = {
+    getBoundingClientRect() { reads++; return {height: 300}; },
+    getAttribute() { return "1"; }
+  };
+  assert.equal(virtualizer.options.measureElement(other, undefined, virtualizer), 300);
+  assert.equal(reads, 2);
 });
 
 test("version command works with Node and preserves previous version mappings", async () => {
