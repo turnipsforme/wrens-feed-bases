@@ -6,6 +6,8 @@ import { AppContext } from "./context";
 
 export const FeedViewType = "feed";
 
+const titleCollator = new Intl.Collator(undefined, { numeric: true, sensitivity: "base" });
+
 export class FeedView extends BasesView {
   type = FeedViewType;
   scrollEl: HTMLElement;
@@ -67,10 +69,7 @@ export class FeedView extends BasesView {
     // user hasn't configured a sort.
     if (this.config.getSort().length === 0) {
       this.entries.sort((a, b) =>
-        a.file.basename.localeCompare(b.file.basename, undefined, {
-          numeric: true,
-          sensitivity: "base",
-        }),
+        titleCollator.compare(a.file.basename, b.file.basename),
       );
     }
 
