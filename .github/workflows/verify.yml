@@ -28,6 +28,7 @@ jobs:
           node --expose-gc scripts/benchmark.mjs > benchmark.json
           node scripts/benchmark-updates.mjs > updates.json
           node scripts/benchmark-virtualizer.mjs > virtualizer.json
+          node --expose-gc scripts/benchmark-sort-changes.mjs > sort-changes.json
       - name: Measure original and prior best on the same runner
         run: |
           trap 'git restore --source=HEAD -- src' EXIT
@@ -40,6 +41,8 @@ jobs:
           bun run build
           node scripts/benchmark-updates.mjs > prior-updates.json
           node scripts/benchmark-virtualizer.mjs > prior-virtualizer.json
+          git restore --source=30c675e752e905f56f78cdb81690048f635a92cb -- src
+          node --expose-gc scripts/benchmark-sort-changes.mjs > prior-sort-changes.json
       - uses: actions/upload-artifact@v4
         with:
           name: mocked-benchmark
@@ -48,3 +51,4 @@ jobs:
             original-benchmark.json
             *updates.json
             *virtualizer.json
+            *sort-changes.json
