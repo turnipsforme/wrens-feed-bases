@@ -14,6 +14,8 @@ jobs:
       TZ: UTC
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
@@ -21,9 +23,24 @@ jobs:
       - run: bun install --frozen-lockfile
       - run: bun run build
       - run: node --test tests/*.test.mjs
-      - name: Record mocked baseline
-        run: node --expose-gc scripts/benchmark.mjs > benchmark.json
+      - name: Record candidate benchmarks
+        run: |
+          node --expose-gc scripts/benchmark.mjs > benchmark.json
+          node scripts/benchmark-updates.mjs > updates.json
+          node scripts/benchmark-virtualizer.mjs > virtualizer.json
+      - name: Measure original revision on the same runner
+        run: |
+          trap 'git restore --source=HEAD -- src' EXIT
+          git restore --source=a45502b1844608711cf29c1494ec6ffbce610dcb -- src
+          bun run build
+          node --expose-gc scripts/benchmark.mjs > original-benchmark.json
+          node scripts/benchmark-updates.mjs > original-updates.json
+          node scripts/benchmark-virtualizer.mjs > original-virtualizer.json
       - uses: actions/upload-artifact@v4
         with:
           name: mocked-benchmark
-          path: benchmark.json
+          path: |
+            benchmark.json
+            original-benchmark.json
+            *updates.json
+            *virtualizer.json

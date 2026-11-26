@@ -1,9 +1,12 @@
 import { test } from "node:test";
+import { Virtualizer } from "@tanstack/react-virtual";
 import assert from "node:assert/strict";
-import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readdir, readFile, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { FeedEntry, getDisplayTitle, leaves, mockView } from "./mock-feed.mjs";
+import { execFileSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
+import { FeedEntry, getDisplayTitle, leaves, mockView, renderedFiles, beginHooks, useFeedVirtualizer } from "./mock-feed.mjs";
 import { generateVault, makeEntries, noteText, sizes } from "../scripts/fixtures.mjs";
 
 const entry = (basename, extension = "md") => ({ file: { basename, path: basename + "." + extension, extension } });
@@ -11,7 +14,7 @@ test("default sorting is natural, excludes non-Markdown and does not mutate Base
   const input = [entry("Note 10"), entry("picture", "png"), entry("Note 2")];
   const { view, container } = mockView(input);
   view.onDataUpdated();
-  assert.deepEqual(container.props.entries.map(e => e.file.basename), ["Note 2", "Note 10"]);
+  assert.deepEqual(renderedFiles(container).map(e => e.basename), ["Note 2", "Note 10"]);
   assert.equal(input[0].file.basename, "Note 10");
   const click = container.props.onEntryClick;
   view.onDataUpdated();
@@ -25,11 +28,15 @@ test("configured Bases order and fork-specific settings survive updates", () => 
   const { view, container, config } = mockView(input, [{}]);
   config.settings = { multipleColumns: true, fullWidthCards: true, showProperties: true, maxCardWidth: 400 };
   view.onDataUpdated();
-  assert.deepEqual(container.props.entries, input);
+  assert.deepEqual(renderedFiles(container), input.map(e => e.file));
   for (const [key, value] of Object.entries(config.settings)) assert.equal(container.props[key], value);
   view.data = null;
   view.onDataUpdated();
   assert.equal(container.unmounts, 1);
+  assert.equal(view.entries.length, 0);
+  view.data = { data: input };
+  view.onDataUpdated();
+  assert.deepEqual(renderedFiles(container), input.map(e => e.file));
 });
 test("daily title formatting and invalid dates", () => {
   const day = new Date(2025, 0, 21);
@@ -41,7 +48,7 @@ test("daily title formatting and invalid dates", () => {
 });
 function mountEntry() {
   const tree = FeedEntry({ file: entry("Editable").file, app: {}, showProperties: false });
-  const node = { children: [], replaceChildren(...children) { this.children = children; } };
+  const node = { children: [], replaceChildren(...children) { this.children = children; }, createDiv() { return { setText: text => this.children.push(text) }; } };
   const cleanup = tree.props.children[1].props.children.props.ref(node);
   return { node, cleanup, leaf: leaves.at(-1) };
 }
@@ -78,5 +85,155 @@ test("fixtures have unique paths at every requested size and mixed note content"
     assert.equal((await readdir(join(vault, "Notes"))).length, 100);
     assert.match(await readFile(join(vault, "Notes", "2025-01-01.md"), "utf8"), /^---\nkind: fixture/);
     await assert.rejects(generateVault(dir, 100), { code: "EEXIST" });
+  } finally { await rm(dir, { recursive: true, force: true }); }
+});
+
+test("rejected editor opens dispose partially initialized views even after unmount", async (t) => {
+  const log = t.mock.method(console, "error", () => {});
+  for (const unmountFirst of [false, true]) {
+    const { node, cleanup, leaf } = mountEntry();
+    if (unmountFirst) cleanup();
+    leaf.fail();
+    const editor = leaf.view;
+    await Promise.resolve();
+    assert.equal(editor.closes, 1);
+    assert.equal(leaf.view, leaf._empty);
+    assert.ok(leaf.resizeObserver.disconnects >= 1);
+    assert.deepEqual(node.children, unmountFirst ? [] : ["Failed to load Markdown editor"]);
+    if (!unmountFirst) cleanup();
+    assert.equal(editor.closes, 1);
+  }
+  assert.equal(log.mock.callCount(), 1);
+});
+test("editor cleanup disconnects the observer even when close throws", async (t) => {
+  const log = t.mock.method(console, "error", () => {});
+  const { node, cleanup, leaf } = mountEntry();
+  const editor = new leaf._empty.constructor();
+  editor.close = () => { throw new Error("mock close failed"); };
+  leaf.finish(editor);
+  await Promise.resolve();
+  cleanup();
+  assert.deepEqual(node.children, []);
+  assert.equal(leaf.resizeObserver.disconnects, 1);
+  assert.equal(log.mock.callCount(), 1);
+});
+test("unexpected editor type is closed immediately", async () => {
+  const { node, cleanup, leaf } = mountEntry();
+  const invalid = { closes: 0, async close() { this.closes++; } };
+  leaf.finish(invalid);
+  await Promise.resolve();
+  assert.equal(invalid.closes, 1);
+  assert.equal(leaf.view, leaf._empty);
+  assert.deepEqual(node.children, ["Failed to load Markdown editor"]);
+  cleanup();
+  assert.equal(invalid.closes, 1);
+});
+test("natural sort preserves original locale semantics and stable ties", () => {
+  const names = ["Éclair 2", "eclair 2", "eclair 10", "日記", "Å", "a", "A", "a02", "a2", "ß", "ss", "2025-01-01"];
+  const input = names.map((name, i) => ({ file: { basename: name, path: i + "/" + name + ".md", extension: "md" } }));
+  const { view, container } = mockView(input);
+  view.onDataUpdated();
+  const expected = [...input].sort((a,b) => a.file.basename.localeCompare(b.file.basename, undefined, { numeric: true, sensitivity: "base" })).map(e => e.file);
+  assert.deepEqual(renderedFiles(container), expected);
+});
+
+test("unchanged files skip rendering, but settings, rename, order and replacement invalidate", () => {
+  const input = [entry("Z"), entry("A"), entry("image", "png")];
+  const { view, container, config } = mockView(input);
+  view.onDataUpdated();
+  const original = container.props.entries;
+  view.data = { data: input.map(e => ({ file: e.file })) };
+  view.onDataUpdated();
+  assert.equal(container.renders, 1);
+  assert.equal(container.props.entries, original);
+  config.settings.showProperties = true;
+  view.onDataUpdated();
+  assert.equal(container.renders, 2);
+  assert.equal(container.props.showProperties, true);
+  assert.equal(container.props.entries, original);
+  input[0].file.basename = "0";
+  input[0].file.path = "0.md";
+  view.onDataUpdated();
+  assert.equal(container.renders, 3);
+  assert.deepEqual(renderedFiles(container).map(f => f.basename), ["0", "A"]);
+  config.sort = [{}];
+  view.data = { data: [input[1], input[0]] };
+  view.onDataUpdated();
+  assert.equal(container.renders, 4);
+  assert.deepEqual(renderedFiles(container), [input[1].file, input[0].file]);
+  const replacement = { ...input[1].file };
+  view.data = { data: [{ file: replacement }, input[0]] };
+  view.onDataUpdated();
+  assert.equal(container.renders, 5);
+  assert.equal(renderedFiles(container)[0], replacement);
+  view.data = null;
+  view.onDataUpdated();
+  assert.equal(view.lastInput, null);
+  assert.equal(view.lastOptions, null);
+  view.data = { data: input };
+  view.onDataUpdated();
+  assert.equal(container.renders, 6);
+});
+test("input order changes retain the original stable sort tie ordering", () => {
+  const a = { file: { basename: "a", path: "1/a.md", extension: "md" } };
+  const b = { file: { basename: "A", path: "2/A.md", extension: "md" } };
+  const { view, container } = mockView([a,b]);
+  view.onDataUpdated();
+  assert.deepEqual(renderedFiles(container), [a.file,b.file]);
+  view.data = { data: [b,a] };
+  view.onDataUpdated();
+  assert.deepEqual(renderedFiles(container), [b.file,a.file]);
+});
+
+test("backward scroll reuses measured heights and TanStack corrects offsets", () => {
+  const { view, container } = mockView([entry("A"), entry("B")]);
+  view.onDataUpdated();
+  beginHooks();
+  const options = useFeedVirtualizer(container.props.entries, {}, 3);
+  const adjustments = [];
+  const virtualizer = new Virtualizer({ ...options, getScrollElement: () => null,
+    scrollToFn: (_offset, info) => adjustments.push(info.adjustments),
+    observeElementRect() {}, observeElementOffset() {} });
+  assert.equal(virtualizer.getTotalSize(), 560);
+  virtualizer.resizeItem(0, 300);
+  assert.equal(virtualizer.getTotalSize(), 580);
+  virtualizer.scrollDirection = "backward";
+  virtualizer.scrollOffset = 400;
+  let reads = 0;
+  const element = {
+    getBoundingClientRect() { reads++; return {height: 440}; },
+    getAttribute() { return "0"; }
+  };
+  const height = virtualizer.options.measureElement(element, { borderBoxSize: [{blockSize: 440, inlineSize: 500}] }, virtualizer);
+  assert.equal(height, 440);
+  assert.equal(reads, 1);
+  virtualizer.resizeItem(0, height);
+  assert.equal(virtualizer.getTotalSize(), 720);
+  assert.equal(adjustments.at(-1), 140);
+  // The same path reuses its measured height while scrolling backward.
+  assert.equal(virtualizer.options.measureElement(element, undefined, virtualizer), 440);
+  assert.equal(reads, 1);
+  // A new path has no cached height and is measured even while scrolling backward.
+  const other = {
+    getBoundingClientRect() { reads++; return {height: 300}; },
+    getAttribute() { return "1"; }
+  };
+  assert.equal(virtualizer.options.measureElement(other, undefined, virtualizer), 300);
+  assert.equal(reads, 2);
+});
+
+test("version command works with Node and preserves previous version mappings", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "feed-version-"));
+  try {
+    await writeFile(join(dir, "package.json"), JSON.stringify({ version: "0.14.0" }));
+    await writeFile(join(dir, "manifest.json"), JSON.stringify({ version: "0.13.0", minAppVersion: "1.10.0" }));
+    await writeFile(join(dir, "versions.json"), JSON.stringify({ "0.13.0": "1.10.0" }));
+    const script = fileURLToPath(new URL("../version-bump.mjs", import.meta.url));
+    execFileSync(process.execPath, [script], { cwd: dir });
+    assert.equal(JSON.parse(await readFile(join(dir, "manifest.json"), "utf8")).version, "0.14.0");
+    const expected = { "0.13.0": "1.10.0", "0.14.0": "1.10.0" };
+    assert.deepEqual(JSON.parse(await readFile(join(dir, "versions.json"), "utf8")), expected);
+    execFileSync(process.execPath, [script], { cwd: dir });
+    assert.deepEqual(JSON.parse(await readFile(join(dir, "versions.json"), "utf8")), expected);
   } finally { await rm(dir, { recursive: true, force: true }); }
 });

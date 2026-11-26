@@ -1,4 +1,4 @@
-import { App, BasesEntry, TFile } from "obsidian";
+import { App, TFile } from "obsidian";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useApp } from "./hooks";
 import { FeedEntry } from "./FeedEntry";
@@ -48,7 +48,7 @@ export const MasonryView: React.FC<MasonryViewProps> = ({
 
   // Distribute entries across columns
   const columns = useMemo(() => {
-    const cols: BasesEntry[][] = Array.from({ length: columnCount }, () => []);
+    const cols: TFile[][] = Array.from({ length: columnCount }, () => []);
 
     // Distribute entries evenly across columns (round-robin)
     entries.forEach((entry, index) => {
@@ -117,7 +117,7 @@ const MasonryColumn: React.FC<MasonryColumnProps> = ({
               }}
             >
               <FeedEntry
-                file={entry.file}
+                file={entry}
                 app={app}
                 showProperties={showProperties}
                 onEntryClick={onEntryClick}
@@ -134,7 +134,7 @@ const MasonryColumn: React.FC<MasonryColumnProps> = ({
 // Props
 
 type MasonryViewProps = {
-  entries: BasesEntry[];
+  entries: TFile[];
   onEntryClick: (file: TFile, isModEvent: boolean) => void;
   onEntryContextMenu: (evt: React.MouseEvent, file: TFile) => void;
   scrollElement: HTMLElement;
@@ -143,7 +143,7 @@ type MasonryViewProps = {
 };
 
 type MasonryColumnProps = {
-  entries: BasesEntry[];
+  entries: TFile[];
   scrollElement: HTMLElement;
   app: App;
   showProperties: boolean;
