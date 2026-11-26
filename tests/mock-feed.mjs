@@ -35,11 +35,13 @@ const mocks = {
     }
   `,
   "./FeedReactView": "export function FeedReactView() {}",
+  "virtual-react": `let cursor = 0; const hooks = []; export function beginHooks() { cursor = 0; } export function useMemo(fn, deps) { const i = cursor++; const old = hooks[i]; if (old && deps.every((d,j) => d === old.deps[j])) return old.value; const value = fn(); hooks[i] = { deps, value }; return value; } export const useCallback = (fn, deps) => useMemo(() => fn, deps);`,
+  "@tanstack/react-virtual": "export const useVirtualizer = options => options;",
   "entry-react": "export const memo = fn => fn; export const useCallback = fn => fn; export default {};"
 };
 const result = await build({
   stdin: {
-    contents: 'export * from "./src/feed-view"; export * from "./src/display-title"; export * from "./src/FeedEntry"; export { leaves } from "obsidian";',
+    contents: 'export * from "./src/feed-view"; export * from "./src/display-title"; export * from "./src/FeedEntry"; export { leaves } from "obsidian"; export * from "./src/virtualizer"; export { beginHooks } from "virtual-react";',
     resolveDir: process.cwd(), loader: "ts"
   },
   bundle: true, write: false, platform: "node", format: "esm",
@@ -47,8 +49,9 @@ const result = await build({
   plugins: [{
     name: "mock-host",
     setup(plugin) {
-      plugin.onResolve({ filter: /^(obsidian|react-dom\/client|\.\/FeedReactView|react)$/ }, args => {
+      plugin.onResolve({ filter: /^(obsidian|react-dom\/client|\.\/FeedReactView|@tanstack\/react-virtual|virtual-react|react)$/ }, args => {
         if (args.path === "react") {
+          if (args.importer.endsWith("virtualizer.ts")) return { path: "virtual-react", namespace: "mock" };
           if (!args.importer.endsWith("FeedEntry.tsx")) return;
           return { path: "entry-react", namespace: "mock" };
         }
@@ -58,7 +61,7 @@ const result = await build({
     }
   }]
 });
-export const { FeedView, FeedEntry, getDisplayTitle, leaves } =
+export const { FeedView, FeedEntry, getDisplayTitle, leaves, useFeedVirtualizer, beginHooks } =
   await import("data:text/javascript;base64," + Buffer.from(result.outputFiles[0].text).toString("base64"));
 
 export const renderedFiles = container => container.props.entries.map(entry => entry.file ?? entry);

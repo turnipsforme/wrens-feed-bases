@@ -23,17 +23,28 @@ jobs:
       - run: bun install --frozen-lockfile
       - run: bun run build
       - run: node --test tests/*.test.mjs
-      - name: Record mocked baseline
-        run: node --expose-gc scripts/benchmark.mjs > benchmark.json
-      - name: Measure original revision on the same runner
+      - name: Record candidate benchmarks
+        run: |
+          node --expose-gc scripts/benchmark.mjs > benchmark.json
+          node scripts/benchmark-updates.mjs > updates.json
+          node scripts/benchmark-virtualizer.mjs > virtualizer.json
+      - name: Measure original and prior best on the same runner
         run: |
           trap 'git restore --source=HEAD -- src' EXIT
           git restore --source=a45502b1844608711cf29c1494ec6ffbce610dcb -- src
           bun run build
           node --expose-gc scripts/benchmark.mjs > original-benchmark.json
+          node scripts/benchmark-updates.mjs > original-updates.json
+          node scripts/benchmark-virtualizer.mjs > original-virtualizer.json
+          git restore --source=de30f2f3a72fefeb689a0a85fa8f85baaea2c859 -- src
+          bun run build
+          node scripts/benchmark-updates.mjs > prior-updates.json
+          node scripts/benchmark-virtualizer.mjs > prior-virtualizer.json
       - uses: actions/upload-artifact@v4
         with:
           name: mocked-benchmark
           path: |
             benchmark.json
             original-benchmark.json
+            *updates.json
+            *virtualizer.json
