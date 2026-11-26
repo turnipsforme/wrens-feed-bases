@@ -7,6 +7,28 @@ import { AppContext } from "./context";
 export const FeedViewType = "feed";
 
 const titleCollator = new Intl.Collator(undefined, { numeric: true, sensitivity: "base" });
+const compareTitles = (a: TFile, b: TFile) => titleCollator.compare(a.basename, b.basename);
+
+// Reuse the previous sorted run when most of a large query survives. Ties still
+// follow the new Bases order, not the previous query order.
+function sortFiles(files: TFile[], previous: TFile[]): TFile[] {
+  const fullSort = () => [...files].sort(compareTitles);
+  if (files.length < 1000 || previous.length < 1000) return fullSort();
+  const ranks = new Map<TFile, number>();
+  files.forEach((file, index) => ranks.set(file, index));
+  if (ranks.size !== files.length) return fullSort();
+  const seen = new Set<TFile>();
+  const ordered: TFile[] = [];
+  for (const file of previous) {
+    if (ranks.has(file) && !seen.has(file)) {
+      seen.add(file);
+      ordered.push(file);
+    }
+  }
+  if (ordered.length < files.length / 2) return fullSort();
+  for (const file of files) if (!seen.has(file)) ordered.push(file);
+  return ordered.sort((a, b) => compareTitles(a, b) || ranks.get(a)! - ranks.get(b)!);
+}
 
 export class FeedView extends BasesView {
   type = FeedViewType;
@@ -77,7 +99,7 @@ export class FeedView extends BasesView {
       const files = this.data.data.filter(entry => entry.file.extension === "md").map(entry => entry.file);
       this.lastInput = { files, paths: files.map(file => file.path), fallback };
       // Bases presorts configured queries; otherwise preserve the natural title sort.
-      this.entries = fallback ? [...files].sort((a, b) => titleCollator.compare(a.basename, b.basename)) : files;
+      this.entries = fallback ? sortFiles(files, previous?.fallback ? this.entries : []) : files;
     }
     this.renderReactFeed(unchanged);
   }

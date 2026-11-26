@@ -167,3 +167,15 @@ test("input order changes retain the original stable sort tie ordering", () => {
   view.onDataUpdated();
   assert.deepEqual(renderedFiles(container), [b.file,a.file]);
 });
+
+test("incremental sorting agrees with a full stable locale sort through changes, ties and duplicate files", () => {
+  const input = makeEntries(1000);
+  for (let i=0;i<input.length;i++) if (i%8===0) input[i].file.basename="Equal";
+  const {view,container}=mockView(input);
+  for (const next of [input,[...input].reverse(),[...input.slice(1),entry("New")], [...input.slice(1),input[1]],input,input.map(e=>({file:{...e.file}}))]) {
+    view.data={data:next};
+    view.onDataUpdated();
+    const expected=[...next].sort((a,b)=>a.file.basename.localeCompare(b.file.basename,undefined,{numeric:true,sensitivity:"base"})).map(e=>e.file);
+    assert.deepEqual(renderedFiles(container),expected);
+  }
+});
