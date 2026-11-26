@@ -1,4 +1,4 @@
-import { BasesEntry, TFile } from "obsidian";
+import { TFile } from "obsidian";
 import React from "react";
 import { useApp } from "./hooks";
 import { MasonryView } from "./MasonryView";
@@ -81,7 +81,7 @@ const SingleColumnView: React.FC<SingleColumnViewProps> = ({
                 }}
               >
                 <FeedEntry
-                  file={entry.file}
+                  file={entry}
                   app={app}
                   showProperties={showProperties}
                   onEntryClick={onEntryClick}
@@ -99,7 +99,7 @@ const SingleColumnView: React.FC<SingleColumnViewProps> = ({
 // Props
 
 type FeedReactViewProps = {
-  entries: BasesEntry[];
+  entries: TFile[];
   onEntryClick: (file: TFile, isModEvent: boolean) => void;
   onEntryContextMenu: (evt: React.MouseEvent, file: TFile) => void;
   scrollElement: HTMLElement;
@@ -110,7 +110,7 @@ type FeedReactViewProps = {
 };
 
 type SingleColumnViewProps = {
-  entries: BasesEntry[];
+  entries: TFile[];
   onEntryClick: (file: TFile, isModEvent: boolean) => void;
   onEntryContextMenu: (evt: React.MouseEvent, file: TFile) => void;
   scrollElement: HTMLElement;

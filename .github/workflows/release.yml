@@ -12,11 +12,21 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
       - uses: oven-sh/setup-bun@v2
       - name: Build plugin
         run: |
-          bun install
+          bun install --frozen-lockfile
           bun run build
+          node --test tests/*.test.mjs
+      - name: Verify tag matches manifest
+        run: |
+          tag="${GITHUB_REF#refs/tags/}"
+          test "$tag" = "$(node -p "require('./manifest.json').version")"
       - name: Create release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -25,4 +35,6 @@ jobs:
 
           gh release create "$tag" \
             --title="$tag" \
+            --notes-from-tag \
+            --verify-tag \
             main.js manifest.json styles.css

@@ -6,13 +6,17 @@ import { AppContext } from "./context";
 
 export const FeedViewType = "feed";
 
+const titleCollator = new Intl.Collator(undefined, { numeric: true, sensitivity: "base" });
+
 export class FeedView extends BasesView {
   type = FeedViewType;
   scrollEl: HTMLElement;
   containerEl: HTMLElement;
   root: Root | null = null;
 
-  private entries: BasesEntry[] = [];
+  private entries: TFile[] = [];
+  private lastInput: { files: TFile[]; paths: string[]; fallback: boolean } | null = null;
+  private lastOptions: [boolean, boolean, boolean, number] | null = null;
 
   constructor(controller: QueryController, scrollEl: HTMLElement) {
     super(controller);
@@ -33,6 +37,8 @@ export class FeedView extends BasesView {
       this.root = null;
     }
     this.entries = [];
+    this.lastInput = null;
+    this.lastOptions = null;
   }
 
   onResize(): void {
@@ -52,32 +58,47 @@ export class FeedView extends BasesView {
     if (!this.data) {
       this.root?.unmount();
       this.root = null;
+      this.entries = [];
+      this.lastInput = null;
+      this.lastOptions = null;
       this.containerEl.empty();
       this.containerEl.createDiv("bases-feed-empty").textContent =
         "No entries to display";
       return;
     }
 
-    this.entries = this.data.data.filter(
-      (entry) => entry.file.extension === "md",
-    );
+    const fallback = this.config.getSort().length === 0;
+    const previous = this.lastInput;
+    const unchanged = previous !== null && previous.fallback === fallback &&
+      this.sameFiles(this.data.data, previous.files, previous.paths);
 
-    // Bases presorts query data by the view's sort config (all keys, with
-    // its own type-aware comparison). Only fall back to title A–Z when the
-    // user hasn't configured a sort.
-    if (this.config.getSort().length === 0) {
-      this.entries.sort((a, b) =>
-        a.file.basename.localeCompare(b.file.basename, undefined, {
-          numeric: true,
-          sensitivity: "base",
-        }),
-      );
+    if (!unchanged) {
+      // Only native files are used by the cards; do not retain obsolete Bases entries.
+      const files: TFile[] = [];
+      const paths: string[] = [];
+      for (const { file } of this.data.data) {
+        if (file.extension !== "md") continue;
+        files.push(file);
+        paths.push(file.path);
+      }
+      this.lastInput = { files, paths, fallback };
+      // Bases presorts configured queries; otherwise preserve the natural title sort.
+      this.entries = fallback ? [...files].sort((a, b) => titleCollator.compare(a.basename, b.basename)) : files;
     }
-
-    this.renderReactFeed();
+    this.renderReactFeed(unchanged);
   }
 
-  private renderReactFeed(): void {
+  private sameFiles(data: BasesEntry[], files: TFile[], paths: string[]): boolean {
+    let index = 0;
+    for (const { file } of data) {
+      if (file.extension !== "md") continue;
+      if (files[index] !== file || paths[index] !== file.path) return false;
+      index++;
+    }
+    return index === files.length;
+  }
+
+  private renderReactFeed(unchanged: boolean): void {
     if (!this.root) {
       this.root = createRoot(this.containerEl);
     }
@@ -90,6 +111,10 @@ export class FeedView extends BasesView {
       (this.config.get("fullWidthCards") as boolean | undefined) ?? false;
     const maxCardWidth =
       (this.config.get("maxCardWidth") as number | undefined) ?? 760;
+
+    const options: [boolean, boolean, boolean, number] = [showProperties, multipleColumns, fullWidthCards, maxCardWidth];
+    if (unchanged && this.lastOptions && options.every((value, index) => value === this.lastOptions![index])) return;
+    this.lastOptions = options;
 
     this.root.render(
       <StrictMode>
