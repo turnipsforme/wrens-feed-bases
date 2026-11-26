@@ -74,8 +74,14 @@ export class FeedView extends BasesView {
 
     if (!unchanged) {
       // Only native files are used by the cards; do not retain obsolete Bases entries.
-      const files = this.data.data.filter(entry => entry.file.extension === "md").map(entry => entry.file);
-      this.lastInput = { files, paths: files.map(file => file.path), fallback };
+      const files: TFile[] = [];
+      const paths: string[] = [];
+      for (const { file } of this.data.data) {
+        if (file.extension !== "md") continue;
+        files.push(file);
+        paths.push(file.path);
+      }
+      this.lastInput = { files, paths, fallback };
       // Bases presorts configured queries; otherwise preserve the natural title sort.
       this.entries = fallback ? [...files].sort((a, b) => titleCollator.compare(a.basename, b.basename)) : files;
     }

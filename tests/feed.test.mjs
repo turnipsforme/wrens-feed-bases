@@ -1,9 +1,11 @@
 import { test } from "node:test";
 import { Virtualizer } from "@tanstack/react-virtual";
 import assert from "node:assert/strict";
-import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readdir, readFile, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { execFileSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
 import { FeedEntry, getDisplayTitle, leaves, mockView, renderedFiles, beginHooks, useFeedVirtualizer } from "./mock-feed.mjs";
 import { generateVault, makeEntries, noteText, sizes } from "../scripts/fixtures.mjs";
 
@@ -196,4 +198,20 @@ test("late height changes while scrolling backward update positions using TanSta
   assert.equal(adjustments.at(-1), 140);
   assert.equal(virtualizer.options.measureElement(element, undefined, virtualizer), 440);
   assert.equal(reads, 1);
+});
+
+test("version command works with Node and preserves previous version mappings", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "feed-version-"));
+  try {
+    await writeFile(join(dir, "package.json"), JSON.stringify({ version: "0.14.0" }));
+    await writeFile(join(dir, "manifest.json"), JSON.stringify({ version: "0.13.0", minAppVersion: "1.10.0" }));
+    await writeFile(join(dir, "versions.json"), JSON.stringify({ "0.13.0": "1.10.0" }));
+    const script = fileURLToPath(new URL("../version-bump.mjs", import.meta.url));
+    execFileSync(process.execPath, [script], { cwd: dir });
+    assert.equal(JSON.parse(await readFile(join(dir, "manifest.json"), "utf8")).version, "0.14.0");
+    const expected = { "0.13.0": "1.10.0", "0.14.0": "1.10.0" };
+    assert.deepEqual(JSON.parse(await readFile(join(dir, "versions.json"), "utf8")), expected);
+    execFileSync(process.execPath, [script], { cwd: dir });
+    assert.deepEqual(JSON.parse(await readFile(join(dir, "versions.json"), "utf8")), expected);
+  } finally { await rm(dir, { recursive: true, force: true }); }
 });

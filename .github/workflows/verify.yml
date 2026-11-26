@@ -40,6 +40,8 @@ jobs:
           bun run build
           node scripts/benchmark-updates.mjs > prior-updates.json
           node scripts/benchmark-virtualizer.mjs > prior-virtualizer.json
+          git restore --source=ff88a5e87648c847d81cb3e669b6bb1a51f0ed05 -- src
+          node scripts/benchmark-updates.mjs > previous-updates.json
       - uses: actions/upload-artifact@v4
         with:
           name: mocked-benchmark
