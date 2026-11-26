@@ -1,0 +1,29 @@
+name: Verify feed
+on:
+  pull_request:
+  push:
+    branches: [main, "aae/**"]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      TZ: UTC
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install --frozen-lockfile
+      - run: bun run build
+      - run: node --test tests/*.test.mjs
+      - name: Record mocked baseline
+        run: node --expose-gc scripts/benchmark.mjs > benchmark.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mocked-benchmark
+          path: benchmark.json
