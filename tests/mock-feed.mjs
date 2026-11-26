@@ -19,7 +19,10 @@ const mocks = {
       constructor() { leaves.push(this); }
       openFile(file) {
         this.file = file;
-        return new Promise(resolve => { this.finish = () => { this.view = new MarkdownView(); resolve(); }; });
+        return new Promise((resolve, reject) => {
+          this.finish = (view = new MarkdownView()) => { this.view = view; resolve(); };
+          this.fail = (view = new MarkdownView()) => { this.view = view; reject(new Error("mock open failed")); };
+        });
       }
     }
   `,
@@ -57,6 +60,8 @@ const result = await build({
 });
 export const { FeedView, FeedEntry, getDisplayTitle, leaves } =
   await import("data:text/javascript;base64," + Buffer.from(result.outputFiles[0].text).toString("base64"));
+
+export const renderedFiles = container => container.props.entries.map(entry => entry.file ?? entry);
 
 export function mockView(entries, sort = []) {
   const container = {

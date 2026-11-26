@@ -2,7 +2,7 @@ import { performance } from "node:perf_hooks";
 import { readFile } from "node:fs/promises";
 import { gzipSync } from "node:zlib";
 import { strict as assert } from "node:assert";
-import { mockView } from "../tests/mock-feed.mjs";
+import { mockView, renderedFiles } from "../tests/mock-feed.mjs";
 import { makeEntries, sizes } from "./fixtures.mjs";
 
 const stats = values => {
@@ -27,9 +27,9 @@ for (const size of sizes) {
       start = performance.now();
       view.onDataUpdated();
       if (i >= 2) update.push(performance.now() - start);
-      assert.equal(container.props.entries.length, size);
-      if (mode === "configured") assert.equal(container.props.entries[0], entries.at(-1));
-      else assert.deepEqual(container.props.entries.map(e => e.file.basename), [...entries].map(e => e.file.basename).sort((a,b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" })));
+      assert.equal(renderedFiles(container).length, size);
+      if (mode === "configured") assert.equal(renderedFiles(container)[0], entries.at(-1).file);
+      else assert.deepEqual(renderedFiles(container).map(e => e.basename), [...entries].map(e => e.file.basename).sort((a,b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" })));
       peakSample = Math.max(peakSample, process.memoryUsage().heapUsed);
       if (i >= 2) renderRequests += container.renders;
       view.onunload();

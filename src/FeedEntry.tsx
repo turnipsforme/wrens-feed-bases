@@ -50,6 +50,7 @@ export const FeedEntry = memo(function FeedEntry({
 
           const view = leaf.view;
           if (!(view instanceof MarkdownView)) {
+            disposeLeaf(leaf);
             node.replaceChildren();
             const err = node.createDiv("bases-feed-error");
             err.setText("Failed to load Markdown editor");
@@ -58,7 +59,13 @@ export const FeedEntry = memo(function FeedEntry({
 
           node.replaceChildren(view.containerEl);
         } catch (e) {
-          if (alive) console.error("Error setting up editor:", e);
+          disposeLeaf(leaf);
+          if (alive) {
+            console.error("Error setting up editor:", e);
+            node.replaceChildren();
+            const err = node.createDiv("bases-feed-error");
+            err.setText("Failed to load Markdown editor");
+          }
         }
       })();
 
@@ -112,9 +119,14 @@ function disposeLeaf(leaf: WorkspaceLeaf): void {
         console.error("Error closing feed editor:", e);
       });
     }
-    internal.resizeObserver?.disconnect();
   } catch (e) {
     console.error("Error disposing feed editor:", e);
+  } finally {
+    try {
+      (leaf as unknown as InternalLeaf).resizeObserver?.disconnect();
+    } catch (e) {
+      console.error("Error disconnecting feed editor:", e);
+    }
   }
 }
 

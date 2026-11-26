@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { FeedEntry, getDisplayTitle, leaves, mockView } from "./mock-feed.mjs";
+import { FeedEntry, getDisplayTitle, leaves, mockView, renderedFiles } from "./mock-feed.mjs";
 import { generateVault, makeEntries, noteText, sizes } from "../scripts/fixtures.mjs";
 
 const entry = (basename, extension = "md") => ({ file: { basename, path: basename + "." + extension, extension } });
@@ -11,7 +11,7 @@ test("default sorting is natural, excludes non-Markdown and does not mutate Base
   const input = [entry("Note 10"), entry("picture", "png"), entry("Note 2")];
   const { view, container } = mockView(input);
   view.onDataUpdated();
-  assert.deepEqual(container.props.entries.map(e => e.file.basename), ["Note 2", "Note 10"]);
+  assert.deepEqual(renderedFiles(container).map(e => e.basename), ["Note 2", "Note 10"]);
   assert.equal(input[0].file.basename, "Note 10");
   const click = container.props.onEntryClick;
   view.onDataUpdated();
@@ -25,11 +25,15 @@ test("configured Bases order and fork-specific settings survive updates", () => 
   const { view, container, config } = mockView(input, [{}]);
   config.settings = { multipleColumns: true, fullWidthCards: true, showProperties: true, maxCardWidth: 400 };
   view.onDataUpdated();
-  assert.deepEqual(container.props.entries, input);
+  assert.deepEqual(renderedFiles(container), input.map(e => e.file));
   for (const [key, value] of Object.entries(config.settings)) assert.equal(container.props[key], value);
   view.data = null;
   view.onDataUpdated();
   assert.equal(container.unmounts, 1);
+  assert.equal(view.entries.length, 0);
+  view.data = { data: input };
+  view.onDataUpdated();
+  assert.deepEqual(renderedFiles(container), input.map(e => e.file));
 });
 test("daily title formatting and invalid dates", () => {
   const day = new Date(2025, 0, 21);
@@ -41,7 +45,7 @@ test("daily title formatting and invalid dates", () => {
 });
 function mountEntry() {
   const tree = FeedEntry({ file: entry("Editable").file, app: {}, showProperties: false });
-  const node = { children: [], replaceChildren(...children) { this.children = children; } };
+  const node = { children: [], replaceChildren(...children) { this.children = children; }, createDiv() { return { setText: text => this.children.push(text) }; } };
   const cleanup = tree.props.children[1].props.children.props.ref(node);
   return { node, cleanup, leaf: leaves.at(-1) };
 }
@@ -79,4 +83,39 @@ test("fixtures have unique paths at every requested size and mixed note content"
     assert.match(await readFile(join(vault, "Notes", "2025-01-01.md"), "utf8"), /^---\nkind: fixture/);
     await assert.rejects(generateVault(dir, 100), { code: "EEXIST" });
   } finally { await rm(dir, { recursive: true, force: true }); }
+});
+
+test("rejected editor opens dispose partially initialized views even after unmount", async () => {
+  for (const unmountFirst of [false, true]) {
+    const { node, cleanup, leaf } = mountEntry();
+    if (unmountFirst) cleanup();
+    leaf.fail();
+    const editor = leaf.view;
+    await Promise.resolve();
+    assert.equal(editor.closes, 1);
+    assert.equal(leaf.view, leaf._empty);
+    assert.ok(leaf.resizeObserver.disconnects >= 1);
+    assert.deepEqual(node.children, unmountFirst ? [] : ["Failed to load Markdown editor"]);
+    if (!unmountFirst) cleanup();
+    assert.equal(editor.closes, 1);
+  }
+});
+test("unexpected editor type is closed immediately", async () => {
+  const { node, cleanup, leaf } = mountEntry();
+  const invalid = { closes: 0, async close() { this.closes++; } };
+  leaf.finish(invalid);
+  await Promise.resolve();
+  assert.equal(invalid.closes, 1);
+  assert.equal(leaf.view, leaf._empty);
+  assert.deepEqual(node.children, ["Failed to load Markdown editor"]);
+  cleanup();
+  assert.equal(invalid.closes, 1);
+});
+test("natural sort preserves original locale semantics and stable ties", () => {
+  const names = ["Éclair 2", "eclair 2", "eclair 10", "日記", "Å", "a", "A", "a02", "a2", "ß", "ss", "2025-01-01"];
+  const input = names.map((name, i) => ({ file: { basename: name, path: i + "/" + name + ".md", extension: "md" } }));
+  const { view, container } = mockView(input);
+  view.onDataUpdated();
+  const expected = [...input].sort((a,b) => a.file.basename.localeCompare(b.file.basename, undefined, { numeric: true, sensitivity: "base" })).map(e => e.file);
+  assert.deepEqual(renderedFiles(container), expected);
 });

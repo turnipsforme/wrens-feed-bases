@@ -54,6 +54,7 @@ export class FeedView extends BasesView {
     if (!this.data) {
       this.root?.unmount();
       this.root = null;
+      this.entries = [];
       this.containerEl.empty();
       this.containerEl.createDiv("bases-feed-empty").textContent =
         "No entries to display";
