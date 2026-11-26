@@ -1,9 +1,10 @@
 import { test } from "node:test";
+import { Virtualizer } from "@tanstack/react-virtual";
 import assert from "node:assert/strict";
 import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { FeedEntry, getDisplayTitle, leaves, mockView, renderedFiles } from "./mock-feed.mjs";
+import { FeedEntry, getDisplayTitle, leaves, mockView, renderedFiles, beginHooks, useFeedVirtualizer } from "./mock-feed.mjs";
 import { generateVault, makeEntries, noteText, sizes } from "../scripts/fixtures.mjs";
 
 const entry = (basename, extension = "md") => ({ file: { basename, path: basename + "." + extension, extension } });
@@ -166,4 +167,33 @@ test("input order changes retain the original stable sort tie ordering", () => {
   view.data = { data: [b,a] };
   view.onDataUpdated();
   assert.deepEqual(renderedFiles(container), [b.file,a.file]);
+});
+
+test("late height changes while scrolling backward update positions using TanStack's public measurement", () => {
+  const { view, container } = mockView([entry("A"), entry("B")]);
+  view.onDataUpdated();
+  beginHooks();
+  const options = useFeedVirtualizer(container.props.entries, {}, 3);
+  const adjustments = [];
+  const virtualizer = new Virtualizer({ ...options, getScrollElement: () => null,
+    scrollToFn: (_offset, info) => adjustments.push(info.adjustments),
+    observeElementRect() {}, observeElementOffset() {} });
+  assert.equal(virtualizer.getTotalSize(), 560);
+  virtualizer.resizeItem(0, 300);
+  assert.equal(virtualizer.getTotalSize(), 580);
+  virtualizer.scrollDirection = "backward";
+  virtualizer.scrollOffset = 400;
+  let reads = 0;
+  const element = {
+    getBoundingClientRect() { reads++; return {height: 440}; },
+    get offsetHeight() { reads++; return 440; }, getAttribute() { return "0"; }
+  };
+  const height = virtualizer.options.measureElement(element, { borderBoxSize: [{blockSize: 440, inlineSize: 500}] }, virtualizer);
+  assert.equal(height, 440);
+  assert.equal(reads, 0);
+  virtualizer.resizeItem(0, height);
+  assert.equal(virtualizer.getTotalSize(), 720);
+  assert.equal(adjustments.at(-1), 140);
+  assert.equal(virtualizer.options.measureElement(element, undefined, virtualizer), 440);
+  assert.equal(reads, 1);
 });

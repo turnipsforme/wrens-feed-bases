@@ -24,20 +24,5 @@ export const useFeedVirtualizer = (
     getItemKey,
     estimateSize: () => 280,
     overscan,
-    measureElement: (element, _entry, instance) => {
-      const measure = () =>
-        (element as HTMLElement | null)?.getBoundingClientRect().height ?? 0;
-
-      // When scrolling backward, reuse the cached height to avoid cards above
-      // the viewport resizing and making the list jump.
-      const direction = instance.scrollDirection;
-      if (direction === "forward" || direction === null) return measure();
-
-      const index = Number((element as HTMLElement).getAttribute("data-index"));
-      const key = instance.options.getItemKey(index);
-      // @ts-ignore - accessing private property for stable backward scrolling
-      const cached: number | undefined = instance.itemSizeCache.get(key);
-      return cached ?? measure();
-    },
   });
 };
