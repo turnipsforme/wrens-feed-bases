@@ -26,6 +26,8 @@ jobs:
       - name: Verify tag matches manifest
         run: |
           tag="${GITHUB_REF#refs/tags/}"
+          # checkout flattens annotated tags; refetch so --notes-from-tag sees the message
+          git fetch --force origin "refs/tags/$tag:refs/tags/$tag"
           test "$tag" = "$(node -p "require('./manifest.json').version")"
       - name: Create release
         env:
